@@ -1,27 +1,41 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import { router } from 'expo-router';
+import { useAuth } from '../context/AuthContext';
 
 export default function ProfileScreen() {
+  const { user, logout } = useAuth();
+
   const handleLogout = () => {
-    // 2. Haftada Token/Session temizleme burada yapılacak
+    logout();
     router.replace('/welcome');
+  };
+  
+  const handleBackToHome = () => {
+    router.push('/');
   };
 
   return (
     <View style={styles.container}>
+      <TouchableOpacity style={styles.backButton} onPress={handleBackToHome}>
+        <Text style={styles.backButtonText}>← Ana Sayfaya Dön</Text>
+      </TouchableOpacity>
+
       <Text style={styles.title}>Kullanıcı Profili</Text>
 
       <View style={styles.card}>
-        <Text style={styles.label}>Ad Soyad:</Text>
-        <Text style={styles.value}>Öğrenci Adı</Text>
+        <Text style={styles.label}>Kullanıcı Adı:</Text>
+        <Text style={styles.value}>{user?.name || 'Öğrenci'}</Text>
 
         <Text style={styles.label}>E-posta:</Text>
-        <Text style={styles.value}>ogrenci@firat.edu.tr</Text>
+        <Text style={styles.value}>{user?.email || 'ogrenci@firat.edu.tr'}</Text>
+
+        <Text style={styles.label}>Bölüm:</Text>
+        <Text style={styles.value}>{user?.department || 'Bilgisayar Mühendisliği'}</Text>
       </View>
 
-      <TouchableOpacity style={styles.button} onPress={handleLogout}>
-        <Text style={styles.buttonText}>Çıkış Yap</Text>
+      <TouchableOpacity style={styles.logoutButton} onPress={handleLogout}>
+        <Text style={styles.logoutButtonText}>Çıkış Yap</Text>
       </TouchableOpacity>
     </View>
   );
@@ -33,6 +47,14 @@ const styles = StyleSheet.create({
     padding: 24,
     backgroundColor: '#fff',
     justifyContent: 'center',
+  },
+  backButton: {
+    marginBottom: 20,
+  },
+  backButtonText: {
+    color: '#5B67EA',
+    fontSize: 16,
+    fontWeight: '600',
   },
   title: {
     fontSize: 28,
@@ -59,13 +81,13 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#212529',
   },
-  button: {
+  logoutButton: {
     backgroundColor: '#FF3B30',
     padding: 16,
     borderRadius: 8,
     alignItems: 'center',
   },
-  buttonText: {
+  logoutButtonText: {
     color: '#fff',
     fontSize: 16,
     fontWeight: '600',

@@ -1,6 +1,7 @@
-import { router, useLocalSearchParams } from 'expo-router';
+import { router, useLocalSearchParams, Redirect } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import React, {useEffect} from 'react';
+import { useAuth } from '../context/AuthContext';
 import {
   Pressable,
   ScrollView,
@@ -47,15 +48,12 @@ const howItWorks = [
 ];
 
 export default function HomeScreen() {
-  const params = useLocalSearchParams();
+  const { isAuthenticated } = useAuth();
 
-  useEffect(() => {
-    // Eğer login sayfasından başarıyla yönlendirilmediyse welcome'a at
-    // (İleride burada gerçek JWT / Token kontrolü olacak)
-    if (params.loggedIn !== 'true') {
-      router.replace('/welcome');
-    }
-  }, [params.loggedIn]);
+  // Oturum açılmadıysa Welcome ekranına yönlendir
+  if (!isAuthenticated) {
+    return <Redirect href="/welcome" />;
+  }
   
   const [showSubscription, setShowSubscription] = React.useState(false);
 

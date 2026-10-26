@@ -1,17 +1,28 @@
 import React, { useState } from 'react';
-import { View, Text, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, TextInput, TouchableOpacity, StyleSheet, Alert } from 'react-native';
 import { router } from 'expo-router';
+import { useAuth } from '../context/AuthContext';
 
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const { login } = useAuth();
 
   const handleLogin = () => {
-    // 2. Haftada backend API isteği / JWT doğrulaması buraya gelecek
-    console.log('Giriş yapıldı:', email);
-    
-    // Ana sayfaya 'loggedIn=true' parametresiyle geçiş yap
-  router.replace('/?loggedIn=true' as any);
+    if (!email || !password) {
+      Alert.alert('Hata', 'Lütfen e-posta adresinizi ve şifrenizi girin.');
+      return;
+    }
+
+    // Simüle edilmiş oturum başlatma (2. Hafta İsteri)
+    login({
+      email: email,
+      name: email.split('@')[0],
+      department: 'Bilgisayar Mühendisliği',
+    });
+
+    // Ana sayfaya yönlendir
+    router.replace('/');
   };
 
   return (
