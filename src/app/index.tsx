@@ -1,12 +1,13 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import React from 'react';
+import React, {useEffect} from 'react';
 import {
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
   View,
+  TouchableOpacity,
 } from 'react-native';
 
 const departments = [
@@ -46,6 +47,16 @@ const howItWorks = [
 ];
 
 export default function HomeScreen() {
+  const params = useLocalSearchParams();
+
+  useEffect(() => {
+    // Eğer login sayfasından başarıyla yönlendirilmediyse welcome'a at
+    // (İleride burada gerçek JWT / Token kontrolü olacak)
+    if (params.loggedIn !== 'true') {
+      router.replace('/welcome');
+    }
+  }, [params.loggedIn]);
+  
   const [showSubscription, setShowSubscription] = React.useState(false);
 
   const handleDepartmentSelect = () => {
@@ -55,7 +66,7 @@ export default function HomeScreen() {
   return (
     <View style={styles.container}>
       <StatusBar style="dark" />
-
+      
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.scrollContent}
@@ -69,12 +80,21 @@ export default function HomeScreen() {
 
             <View>
               <Text style={styles.logo}>StudyMate</Text>
-
+              
               <Text style={styles.logoSub}>
                 Study smarter. Together.
               </Text>
             </View>
           </View>
+          
+          {/* MEVCUT HEADER'IN SAĞINA EKLENEN PROFİL BUTONU */}
+          <TouchableOpacity 
+            style={styles.profileIconButton}
+            onPress={() => router.push('/profile')}
+            activeOpacity={0.7}
+          >
+            <Text style={styles.profileIconText}>👤 Profil</Text>
+          </TouchableOpacity>
         </View>
 
         {/* HERO */}
@@ -616,6 +636,9 @@ const styles = StyleSheet.create({
   /* HEADER */
 
   header: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     marginBottom: 22,
   },
 
@@ -653,6 +676,18 @@ const styles = StyleSheet.create({
     marginTop: 2,
     letterSpacing: 0.3,
   },
+
+  profileIconButton: {
+  backgroundColor: '#F3F4F6',
+  paddingVertical: 8,
+  paddingHorizontal: 12,
+  borderRadius: 20,
+},
+profileIconText: {
+  fontSize: 13,
+  fontWeight: '600',
+  color: '#374151',
+},
 
   /* HERO */
 
