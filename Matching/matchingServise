@@ -1,0 +1,199 @@
+// ==========================================
+// 1. UYUMLULUK SKORU HESAPLAYAN ANA FONKSİYON
+// ==========================================
+function calculateCompatibilityScore(reqA, reqB) {
+  let totalScore = 0;
+  const breakdown = {};
+
+  // DERS UYUMLULUĞU (%30)
+  if (reqA.course_id !== reqB.course_id) {
+    return {
+      isMatchEligible: false,
+      totalScore: 0,
+      reason: "Dersler uyuşmuyor.",
+      breakdown: { courseScore: 0 }
+    };
+  }
+  totalScore += 30;
+  breakdown.courseScore = 30;
+
+  // SEVİYE UYUMLULUĞU (%20)
+  let levelScore = 0;
+  if (reqA.level === reqB.level) {
+    levelScore = 20;
+  } else {
+    levelScore = 10;
+  }
+  totalScore += levelScore;
+  breakdown.levelScore = levelScore;
+
+  // KAYNAK TAMAMLAYICILIĞI (%20)
+  let resourceScore = 0;
+  const aHelpsB = reqA.resourcesOwned && reqA.resourcesOwned.some(res => reqB.resourcesNeeded && reqB.resourcesNeeded.includes(res));
+  const bHelpsA = reqB.resourcesOwned && reqB.resourcesOwned.some(res => reqA.resourcesNeeded && reqA.resourcesNeeded.includes(res));
+
+  if (aHelpsB && bHelpsA) {
+    resourceScore = 20;
+  } else if (aHelpsB || bHelpsA) {
+    resourceScore = 10;
+  } else {
+    resourceScore = 0;
+  }
+  totalScore += resourceScore;
+  breakdown.resourceScore = resourceScore;
+
+  // ÇALIŞMA TERCİHİ (%15)
+  let preferenceScore = 0;
+  if (reqA.studyPreference === reqB.studyPreference) {
+    preferenceScore = 15;
+  }
+  totalScore += preferenceScore;
+  breakdown.preferenceScore = preferenceScore;
+
+  // GÜVENİLİRLİK (%15)
+  const avgRating = (reqA.reliabilityRating + reqB.reliabilityRating) / 2;
+  const reliabilityScore = Math.round((avgRating / 5) * 15);
+  totalScore += reliabilityScore;
+  breakdown.reliabilityScore = reliabilityScore;
+
+  return {
+    isMatchEligible: totalScore >= 50,
+    totalScore: totalScore,
+    breakdown: breakdown
+  };
+}
+
+// ==========================================
+// 2. HAVUZDAKİ EN İYİ ADAYI BULAN FONKSİYON
+// ==========================================
+function findBestMatch(newRequest, pendingRequestsList) {
+  let bestMatch = null;
+  let highestScore = -1;
+
+  for (const candidateRequest of pendingRequestsList) {
+    // Kişinin kendisiyle eşleşmesini engelle
+    if (candidateRequest.user_id === newRequest.user_id) continue;
+
+    const result = calculateCompatibilityScore(newRequest, candidateRequest);
+
+    if (result.isMatchEligible && result.totalScore > highestScore) {
+      highestScore = result.totalScore;
+      bestMatch = {
+        matchedCandidate: candidateRequest,
+        matchDetails: result
+      };
+    }
+  }
+
+  return bestMatch;
+}
+
+// ==========================================
+// 3. YENİ! VERİTABANI (POSTGRESQL) ENTEGRASYON FONKSİYONU
+// ==========================================
+async function processMatchRequest(newRequest, db) {
+  try {
+    console.log("1. Rana'nın 'study_requests' tablosundan bekleyenler aranıyor...");
+    
+    // SADECE AKTİF VE AYNI DERSİ ALAN DİĞER ÖĞRENCİLERİ ÇEKİYORUZ
+    const pendingRequests = await db.query(
+      `SELECT * FROM study_requests 
+       WHERE course_id = $1 AND is_active = TRUE AND user_id != $2`,
+      [newRequest.course_id, newRequest.user_id]
+    );
+
+    console.log("2. Eşleştirme motoru (Senin yazdığın kod) çalışıyor...");
+    // Geçen hafta yazdığın o mükemmel algoritmaya DB'den gelen veriyi yolla
+    const bestMatch = findBestMatch(newRequest, pendingRequests.rows);
+
+    if (bestMatch) {
+      console.log(`3. Eşleşme Bulundu! Puan: %${bestMatch.matchDetails.totalScore}`);
+      
+      // 4. SONUÇLARI RANA'NIN 'matches' TABLOSUNA KAYDETME (INSERT)
+      const insertMatchSQL = `
+        INSERT INTO matches (
+          user1_id, user2_id, 
+          study_request1_id, study_request2_id, 
+          compatibility_score, is_active
+        ) VALUES ($1, $2, $3, $4, $5, TRUE) RETURNING id;
+      `;
+      const matchValues = [
+        newRequest.user_id, // 1. Öğrenci
+        bestMatch.matchedCandidate.user_id, // 2. Öğrenci
+        newRequest.id, // 1. Öğrencinin talebi
+        bestMatch.matchedCandidate.id, // 2. Öğrencinin talebi
+        bestMatch.matchDetails.totalScore // Senin hesapladığın skor
+      ];
+      
+      const newMatchRecord = await db.query(insertMatchSQL, matchValues);
+
+      // 5. Eşleşen kişilerin taleplerini aktiften çıkar (is_active = FALSE)
+      await db.query(`UPDATE study_requests SET is_active = FALSE WHERE id IN ($1, $2)`, 
+        [newRequest.id, bestMatch.matchedCandidate.id]
+      );
+
+      return { success: true, message: "Eşleşme başarıyla matches tablosuna yazıldı!", matchId: newMatchRecord.rows[0].id };
+    } else {
+      return { success: false, message: "Uygun aday bulunamadı, talep havuzda bekliyor." };
+    }
+  } catch (error) {
+    console.error("Veritabanı eşleştirme hatası:", error);
+  }
+}
+
+// ==========================================
+// 4. TERMİNALDE TEST ETMEK İÇİN SAHTE (MOCK) VERİTABANI SİMÜLASYONU
+// ==========================================
+
+// Rana'nın Supabase veritabanını taklit eden obje
+const mockDb = {
+  query: async (sqlText, values) => {
+    // SELECT (Okuma) sorgusu geldiğinde Ayşe'yi döndür
+    if (sqlText.includes("SELECT * FROM study_requests")) {
+      console.log("   [Mock DB] SELECT sorgusu çalıştı, bekleyen talepler getiriliyor...");
+      return {
+        rows: [
+          {
+            id: "req_02",
+            user_id: "user_02",
+            course_id: "CS201",
+            level: "INTERMEDIATE",
+            resourcesOwned: ["SUMMARY_NOTES"],
+            resourcesNeeded: ["PAST_EXAMS"],
+            studyPreference: "QUESTION_SOLVING",
+            reliabilityRating: 4.6
+          }
+        ]
+      };
+    }
+    // INSERT (Kayıt) sorgusu geldiğinde başarılı de
+    if (sqlText.includes("INSERT INTO matches")) {
+      console.log("   [Mock DB] INSERT sorgusu çalıştı, matches tablosuna kayıt atıldı.");
+      return { rows: [{ id: "yeni_match_id_999" }] };
+    }
+    // UPDATE (Güncelleme) sorgusu geldiğinde başarılı de
+    if (sqlText.includes("UPDATE study_requests")) {
+      console.log("   [Mock DB] UPDATE sorgusu çalıştı, talepler pasif (is_active=FALSE) yapıldı.");
+      return { rowCount: 2 };
+    }
+  }
+};
+
+// Ahmet'in (user_01) sistemden gönderdiği yeni istek
+const yeniTalep = {
+  id: "req_01",
+  user_id: "user_01",
+  course_id: "CS201", // Ayşe ile aynı ders
+  level: "INTERMEDIATE",
+  resourcesOwned: ["PAST_EXAMS", "LECTURE_NOTES"],
+  resourcesNeeded: ["SUMMARY_NOTES"],
+  studyPreference: "QUESTION_SOLVING",
+  reliabilityRating: 4.8
+};
+
+// Testi Başlat
+console.log("=== VERİTABANI ENTEGRASYON TESTİ BAŞLIYOR ===");
+processMatchRequest(yeniTalep, mockDb).then(sonuc => {
+  console.log("\n=== İŞLEM SONUCU ===");
+  console.log(sonuc);
+});
