@@ -7,11 +7,13 @@ const app = express();
 app.use(cors());
 app.use(express.json()); // Gelen JSON verilerini okuyabilmek için
 
-// Rotaları içeri aktarıyoruz
 const authRoutes = require('./routes/authRoutes');
+const userRoutes = require('./routes/userRoutes');
+const matchRoutes = require('./routes/matchRoutes');
 
-// Rotaları kullanıma açıyoruz
 app.use('/api/auth', authRoutes);
+app.use('/api/users', userRoutes);
+app.use('/api/matches', matchRoutes);
 
 // Test Rotası
 app.get('/api/health', (req, res) => {
