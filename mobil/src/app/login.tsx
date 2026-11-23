@@ -61,7 +61,7 @@ export default function LoginScreen() {
 
         await login(
           {
-            id: data.user?.id,
+            id: data.user?.id ? String(data.user.id) : '',
             name: fullName,
             email: data.user?.email || email.trim(),
             department: data.user?.department || 'Bilgisayar Mühendisliği',
