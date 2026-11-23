@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   Modal,
   TextInput,
-  Alert,
   ActivityIndicator,
   SafeAreaView,
   ScrollView,
@@ -15,6 +14,11 @@ import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config/api';
+
+type FeedbackType = {
+  type: 'error' | 'success' | 'info';
+  text: string;
+} | null;
 
 export default function ProfileScreen() {
   const { user, token, logout, updateUser } = useAuth();
@@ -25,6 +29,19 @@ export default function ProfileScreen() {
   const [lastName, setLastName] = useState('');
   const [department, setDepartment] = useState('');
   const [loading, setLoading] = useState(false);
+
+  // Ekran içi bildirim durumları
+  const [pageFeedback, setPageFeedback] = useState<FeedbackType>(null);
+  const [modalFeedback, setModalFeedback] = useState<FeedbackType>(null);
+
+  // Ana ekrandaki bildirim kutusunu 3 saniye sonra otomatik gizle
+  useEffect(() => {
+    if (!pageFeedback) return;
+    const timer = setTimeout(() => {
+      setPageFeedback(null);
+    }, 3000);
+    return () => clearTimeout(timer);
+  }, [pageFeedback]);
 
   // İsim ve soyismin baş harflerini alan yardımcı fonksiyon
   const getInitials = (name?: string) => {
@@ -38,6 +55,8 @@ export default function ProfileScreen() {
 
   // Modal açıldığında mevcut bilgileri form alanlarına doldur
   const handleOpenEditModal = () => {
+    setModalFeedback(null);
+    setPageFeedback(null);
     const nameParts = (user?.name || '').split(' ');
     setFirstName(nameParts[0] || '');
     setLastName(nameParts.slice(1).join(' ') || '');
@@ -47,8 +66,13 @@ export default function ProfileScreen() {
 
   // Profil güncelleme API isteği
   const handleSaveProfile = async () => {
+    setModalFeedback(null);
+
     if (!firstName.trim() || !lastName.trim()) {
-      Alert.alert('Eksik Bilgi', 'Ad ve soyad alanları boş bırakılamaz.');
+      setModalFeedback({
+        type: 'error',
+        text: 'Ad ve soyad alanları boş bırakılamaz.',
+      });
       return;
     }
 
@@ -76,10 +100,16 @@ export default function ProfileScreen() {
           department: department.trim(),
         });
 
-        Alert.alert('Başarılı', 'Profil bilgileriniz başarıyla güncellendi.');
         setIsModalVisible(false);
+        setPageFeedback({
+          type: 'success',
+          text: 'Profil bilgileriniz başarıyla güncellendi.',
+        });
       } else {
-        Alert.alert('Güncelleme Başarısız', data.message || 'Profil güncellenirken bir sorun oluştu.');
+        setModalFeedback({
+          type: 'error',
+          text: data.message || data.error || 'Profil güncellenirken bir sorun oluştu.',
+        });
       }
     } catch (error) {
       const updatedFullName = `${firstName.trim()} ${lastName.trim()}`;
@@ -88,8 +118,11 @@ export default function ProfileScreen() {
         department: department.trim(),
       });
 
-      Alert.alert('Bilgi', 'Profil bilgileriniz yerel olarak güncellendi.');
       setIsModalVisible(false);
+      setPageFeedback({
+        type: 'info',
+        text: 'Sunucuya ulaşılamadı; profil bilgileriniz yerel olarak güncellendi.',
+      });
     } finally {
       setLoading(false);
     }
@@ -116,10 +149,60 @@ export default function ProfileScreen() {
             <Text style={styles.logoTitle}>StudyMate</Text>
           </View>
 
-          <TouchableOpacity style={styles.circleButton} onPress={() => Alert.alert('Ayarlar', 'Ayarlar yakında eklenecek.')}>
+          <TouchableOpacity
+            style={styles.circleButton}
+            onPress={() =>
+              setPageFeedback({
+                type: 'info',
+                text: 'Ayarlar ekranı yakında eklenecek.',
+              })
+            }
+          >
             <Ionicons name="settings-outline" size={20} color="#0F2C3D" />
           </TouchableOpacity>
         </View>
+
+        {/* Ana Ekran Bildirim Kutusu */}
+        {pageFeedback && (
+          <View
+            style={[
+              styles.feedbackBox,
+              pageFeedback.type === 'error' && styles.errorBox,
+              pageFeedback.type === 'success' && styles.successBox,
+              pageFeedback.type === 'info' && styles.infoBox,
+              { marginBottom: 18 },
+            ]}
+          >
+            <Ionicons
+              name={
+                pageFeedback.type === 'error'
+                  ? 'alert-circle-outline'
+                  : pageFeedback.type === 'success'
+                  ? 'checkmark-circle-outline'
+                  : 'information-circle-outline'
+              }
+              size={18}
+              color={
+                pageFeedback.type === 'error'
+                  ? '#B91C1C'
+                  : pageFeedback.type === 'success'
+                  ? '#15803D'
+                  : '#0F766E'
+              }
+              style={{ marginRight: 8 }}
+            />
+            <Text
+              style={[
+                styles.feedbackText,
+                pageFeedback.type === 'error' && styles.errorText,
+                pageFeedback.type === 'success' && styles.successText,
+                pageFeedback.type === 'info' && styles.infoText,
+              ]}
+            >
+              {pageFeedback.text}
+            </Text>
+          </View>
+        )}
 
         {/* Sadeleştirilmiş Dinamik Avatar Alanı */}
         <View style={styles.avatarSection}>
@@ -160,13 +243,58 @@ export default function ProfileScreen() {
             <Text style={styles.modalTitle}>Profili Düzenle</Text>
 
             <Text style={styles.inputLabel}>Ad</Text>
-            <TextInput style={styles.modalInput} value={firstName} onChangeText={setFirstName} placeholder="Adınız" />
+            <TextInput
+              style={styles.modalInput}
+              value={firstName}
+              onChangeText={(text) => {
+                setFirstName(text);
+                if (modalFeedback) setModalFeedback(null);
+              }}
+              placeholder="Adınız"
+            />
 
             <Text style={styles.inputLabel}>Soyad</Text>
-            <TextInput style={styles.modalInput} value={lastName} onChangeText={setLastName} placeholder="Soyadınız" />
+            <TextInput
+              style={styles.modalInput}
+              value={lastName}
+              onChangeText={(text) => {
+                setLastName(text);
+                if (modalFeedback) setModalFeedback(null);
+              }}
+              placeholder="Soyadınız"
+            />
 
             <Text style={styles.inputLabel}>Bölüm</Text>
-            <TextInput style={styles.modalInput} value={department} onChangeText={setDepartment} placeholder="Bölümünüz" />
+            <TextInput
+              style={styles.modalInput}
+              value={department}
+              onChangeText={(text) => {
+                setDepartment(text);
+                if (modalFeedback) setModalFeedback(null);
+              }}
+              placeholder="Bölümünüz"
+            />
+
+            {/* Modal İçi Hata Kutusu */}
+            {modalFeedback && (
+              <View
+                style={[
+                  styles.feedbackBox,
+                  modalFeedback.type === 'error' ? styles.errorBox : styles.infoBox,
+                  { marginTop: 14 },
+                ]}
+              >
+                <Ionicons
+                  name="alert-circle-outline"
+                  size={18}
+                  color="#B91C1C"
+                  style={{ marginRight: 8 }}
+                />
+                <Text style={[styles.feedbackText, styles.errorText]}>
+                  {modalFeedback.text}
+                </Text>
+              </View>
+            )}
 
             <View style={styles.modalButtonContainer}>
               <TouchableOpacity
@@ -216,6 +344,36 @@ const styles = StyleSheet.create({
   },
   logoIconText: { color: '#FFF', fontWeight: 'bold', fontSize: 16 },
   logoTitle: { fontSize: 20, fontWeight: 'bold', color: '#0F2C3D' },
+
+  // Bildirim Kutuları
+  feedbackBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+  },
+  errorBox: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  successBox: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  infoBox: {
+    backgroundColor: '#F0FDFA',
+    borderColor: '#99F6E4',
+  },
+  feedbackText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  errorText: { color: '#B91C1C' },
+  successText: { color: '#15803D' },
+  infoText: { color: '#0F766E' },
 
   // Avatar Bölümü
   avatarSection: { alignItems: 'center', marginBottom: 32 },

@@ -13,7 +13,7 @@ interface AuthContextType {
   token: string | null;
   isAuthenticated: boolean;
   isLoading: boolean;
-  login: (userData: User, userToken: string) => Promise<void>;
+  login: (userData: User, userToken: string, rememberMe?: boolean) => Promise<void>;
   logout: () => Promise<void>;
   updateUser: (updatedData: Partial<User>) => Promise<void>;
 }
@@ -45,11 +45,18 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     loadStoredAuth();
   }, []);
 
-  const login = async (userData: User, userToken: string) => {
+  const login = async (userData: User, userToken: string, rememberMe: boolean = true) => {
     setUser(userData);
     setToken(userToken);
-    await AsyncStorage.setItem('userToken', userToken);
-    await AsyncStorage.setItem('userData', JSON.stringify(userData));
+  
+    // Sadece 'Beni Hatırla' seçiliyse cihaz hafızasına kaydet
+    if (rememberMe) {
+      await AsyncStorage.setItem('userToken', userToken);
+      await AsyncStorage.setItem('userData', JSON.stringify(userData));
+    } else {
+      await AsyncStorage.removeItem('userToken');
+      await AsyncStorage.removeItem('userData');
+    }
   };
 
   const logout = async () => {

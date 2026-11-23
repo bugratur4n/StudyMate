@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   SafeAreaView,
   ScrollView,
@@ -13,6 +12,11 @@ import {
 import { router } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
 import { API_BASE_URL } from '../config/api';
+
+type FeedbackType = {
+  type: 'error' | 'success';
+  text: string;
+} | null;
 
 export default function RegisterScreen() {
   const [firstName, setFirstName] = useState('');
@@ -23,15 +27,24 @@ export default function RegisterScreen() {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState<FeedbackType>(null);
 
   const handleRegister = async () => {
+    setFeedback(null);
+
     if (!firstName.trim() || !lastName.trim() || !email.trim() || !password) {
-      Alert.alert('Eksik Bilgi', 'Lütfen tüm alanları doldurunuz.');
+      setFeedback({
+        type: 'error',
+        text: 'Lütfen tüm alanları doldurunuz.',
+      });
       return;
     }
 
     if (password !== confirmPassword) {
-      Alert.alert('Şifre Uyuşmazlığı', 'Girdiğiniz şifreler birbiriyle eşleşmiyor.');
+      setFeedback({
+        type: 'error',
+        text: 'Girdiğiniz şifreler birbiriyle eşleşmiyor.',
+      });
       return;
     }
 
@@ -53,14 +66,25 @@ export default function RegisterScreen() {
       const data = await response.json();
 
       if (response.ok) {
-        Alert.alert('Tebrikler!', 'Kayıt başarılı. Giriş yapabilirsiniz.', [
-          { text: 'Tamam', onPress: () => router.replace('/login') },
-        ]);
+        setFeedback({
+          type: 'success',
+          text: 'Kayıt başarılı! Giriş sayfasına yönlendiriliyorsunuz...',
+        });
+
+        setTimeout(() => {
+          router.replace('/login');
+        }, 1200);
       } else {
-        Alert.alert('Kayıt Başarısız', data.message || 'Kayıt olunurken bir hata oluştu.');
+        setFeedback({
+          type: 'error',
+          text: data.message || data.error || 'Kayıt olunurken bir hata oluştu.',
+        });
       }
     } catch (error) {
-      Alert.alert('Bağlantı Hatası', 'Sunucuya ulaşılamadı. Sunucunuzun açık olduğundan emin olun.');
+      setFeedback({
+        type: 'error',
+        text: 'Sunucuya ulaşılamadı. Sunucunuzun açık olduğundan emin olun.',
+      });
     } finally {
       setLoading(false);
     }
@@ -101,7 +125,10 @@ export default function RegisterScreen() {
               placeholder="Adınız"
               placeholderTextColor="#8A9A9D"
               value={firstName}
-              onChangeText={setFirstName}
+              onChangeText={(text) => {
+                setFirstName(text);
+                if (feedback) setFeedback(null);
+              }}
             />
           </View>
 
@@ -113,7 +140,10 @@ export default function RegisterScreen() {
               placeholder="Soyadınız"
               placeholderTextColor="#8A9A9D"
               value={lastName}
-              onChangeText={setLastName}
+              onChangeText={(text) => {
+                setLastName(text);
+                if (feedback) setFeedback(null);
+              }}
             />
           </View>
 
@@ -125,7 +155,10 @@ export default function RegisterScreen() {
               placeholder="E-posta adresi"
               placeholderTextColor="#8A9A9D"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (feedback) setFeedback(null);
+              }}
               keyboardType="email-address"
               autoCapitalize="none"
             />
@@ -139,7 +172,10 @@ export default function RegisterScreen() {
               placeholder="Şifre"
               placeholderTextColor="#8A9A9D"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (feedback) setFeedback(null);
+              }}
               secureTextEntry={!showPassword}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
@@ -159,7 +195,10 @@ export default function RegisterScreen() {
               placeholder="Şifreyi Tekrar Girin"
               placeholderTextColor="#8A9A9D"
               value={confirmPassword}
-              onChangeText={setConfirmPassword}
+              onChangeText={(text) => {
+                setConfirmPassword(text);
+                if (feedback) setFeedback(null);
+              }}
               secureTextEntry={!showConfirmPassword}
             />
             <TouchableOpacity onPress={() => setShowConfirmPassword(!showConfirmPassword)}>
@@ -170,6 +209,31 @@ export default function RegisterScreen() {
               />
             </TouchableOpacity>
           </View>
+
+          {/* Ekran İçi Uyarı / Başarı Kutusu */}
+          {feedback && (
+            <View
+              style={[
+                styles.feedbackBox,
+                feedback.type === 'error' ? styles.errorBox : styles.successBox,
+              ]}
+            >
+              <Ionicons
+                name={feedback.type === 'error' ? 'alert-circle-outline' : 'checkmark-circle-outline'}
+                size={18}
+                color={feedback.type === 'error' ? '#B91C1C' : '#15803D'}
+                style={{ marginRight: 8 }}
+              />
+              <Text
+                style={[
+                  styles.feedbackText,
+                  feedback.type === 'error' ? styles.errorText : styles.successText,
+                ]}
+              >
+                {feedback.text}
+              </Text>
+            </View>
+          )}
 
           {/* Hesap Oluştur Butonu */}
           <TouchableOpacity style={styles.submitButton} onPress={handleRegister} disabled={loading}>
@@ -270,12 +334,36 @@ const styles = StyleSheet.create({
   },
   inputIcon: { marginRight: 10 },
   input: { flex: 1, fontSize: 15, color: '#0F2C3D' },
+  feedbackBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginTop: 6,
+    borderWidth: 1,
+  },
+  errorBox: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  successBox: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  feedbackText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  errorText: { color: '#B91C1C' },
+  successText: { color: '#15803D' },
   submitButton: {
     backgroundColor: '#0B4754',
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 12,
+    marginTop: 14,
   },
   buttonTextRow: { flexDirection: 'row', alignItems: 'center' },
   submitButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },

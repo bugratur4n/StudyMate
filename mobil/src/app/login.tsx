@@ -5,7 +5,6 @@ import {
   TextInput,
   TouchableOpacity,
   StyleSheet,
-  Alert,
   ActivityIndicator,
   SafeAreaView,
   ScrollView,
@@ -15,17 +14,28 @@ import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../context/AuthContext';
 import { API_BASE_URL } from '../config/api';
 
+type FeedbackType = {
+  type: 'error' | 'success' | 'info';
+  text: string;
+} | null;
+
 export default function LoginScreen() {
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
   const [loading, setLoading] = useState(false);
+  const [feedback, setFeedback] = useState<FeedbackType>(null);
   const { login } = useAuth();
 
   const handleLogin = async () => {
+    setFeedback(null);
+
     if (!email.trim() || !password.trim()) {
-      Alert.alert('Eksik Bilgi', 'Lütfen e-posta adresinizi ve şifrenizi giriniz.');
+      setFeedback({
+        type: 'error',
+        text: 'Lütfen e-posta adresinizi ve şifrenizi giriniz.',
+      });
       return;
     }
 
@@ -44,6 +54,11 @@ export default function LoginScreen() {
         const lastName = data.user?.last_name || data.user?.lastName || '';
         const fullName = `${firstName} ${lastName}`.trim() || data.user?.name || 'Kullanıcı';
 
+        setFeedback({
+          type: 'success',
+          text: `Hoş geldin ${fullName}! Yönlendiriliyorsunuz...`,
+        });
+
         await login(
           {
             id: data.user?.id,
@@ -51,19 +66,35 @@ export default function LoginScreen() {
             email: data.user?.email || email.trim(),
             department: data.user?.department || 'Bilgisayar Mühendisliği',
           },
-          data.token
+          data.token,
+          rememberMe 
         );
 
-        router.replace('/');
+        setTimeout(() => {
+          router.replace('/');
+        }, 800);
       } else {
         const errorMessage = data.message || data.error || 'Girdiğiniz e-posta veya şifre hatalı!';
-        Alert.alert('Giriş Başarısız', errorMessage);
+        setFeedback({
+          type: 'error',
+          text: errorMessage,
+        });
       }
     } catch (error) {
-      Alert.alert('Bağlantı Hatası', 'Sunucuya ulaşılamadı. Lütfen sunucunuzun açık olduğundan emin olun.');
+      setFeedback({
+        type: 'error',
+        text: 'Sunucuya ulaşılamadı. Lütfen sunucunuzun açık olduğundan emin olun.',
+      });
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleForgotPassword = () => {
+    setFeedback({
+      type: 'info',
+      text: 'Şifre sıfırlama bağlantısı e-posta adresinize gönderildi.',
+    });
   };
 
   return (
@@ -101,7 +132,10 @@ export default function LoginScreen() {
               placeholder="E-posta adresi"
               placeholderTextColor="#8A9A9D"
               value={email}
-              onChangeText={setEmail}
+              onChangeText={(text) => {
+                setEmail(text);
+                if (feedback) setFeedback(null);
+              }}
               keyboardType="email-address"
               autoCapitalize="none"
             />
@@ -115,7 +149,10 @@ export default function LoginScreen() {
               placeholder="Şifre"
               placeholderTextColor="#8A9A9D"
               value={password}
-              onChangeText={setPassword}
+              onChangeText={(text) => {
+                setPassword(text);
+                if (feedback) setFeedback(null);
+              }}
               secureTextEntry={!showPassword}
             />
             <TouchableOpacity onPress={() => setShowPassword(!showPassword)}>
@@ -136,10 +173,51 @@ export default function LoginScreen() {
               <Text style={styles.rememberText}>Beni hatırla</Text>
             </TouchableOpacity>
 
-            <TouchableOpacity onPress={() => Alert.alert('Bilgi', 'Şifre sıfırlama bağlantısı gönderildi.')}>
+            <TouchableOpacity onPress={handleForgotPassword}>
               <Text style={styles.forgotText}>Şifremi Unuttum?</Text>
             </TouchableOpacity>
           </View>
+
+          {/* Ekran İçi Uyarı / Başarı Kutusu */}
+          {feedback && (
+            <View
+              style={[
+                styles.feedbackBox,
+                feedback.type === 'error' && styles.errorBox,
+                feedback.type === 'success' && styles.successBox,
+                feedback.type === 'info' && styles.infoBox,
+              ]}
+            >
+              <Ionicons
+                name={
+                  feedback.type === 'error'
+                    ? 'alert-circle-outline'
+                    : feedback.type === 'success'
+                    ? 'checkmark-circle-outline'
+                    : 'information-circle-outline'
+                }
+                size={18}
+                color={
+                  feedback.type === 'error'
+                    ? '#B91C1C'
+                    : feedback.type === 'success'
+                    ? '#15803D'
+                    : '#0F766E'
+                }
+                style={{ marginRight: 8 }}
+              />
+              <Text
+                style={[
+                  styles.feedbackText,
+                  feedback.type === 'error' && styles.errorText,
+                  feedback.type === 'success' && styles.successText,
+                  feedback.type === 'info' && styles.infoText,
+                ]}
+              >
+                {feedback.text}
+              </Text>
+            </View>
+          )}
 
           {/* Giriş Yap Butonu */}
           <TouchableOpacity style={styles.submitButton} onPress={handleLogin} disabled={loading}>
@@ -255,12 +333,41 @@ const styles = StyleSheet.create({
   checkboxChecked: { backgroundColor: '#1A9893', borderColor: '#1A9893' },
   rememberText: { fontSize: 13, color: '#5C7074' },
   forgotText: { fontSize: 13, color: '#1A9893', fontWeight: '600' },
+  feedbackBox: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 10,
+    paddingHorizontal: 12,
+    borderRadius: 12,
+    marginTop: 10,
+    borderWidth: 1,
+  },
+  errorBox: {
+    backgroundColor: '#FEF2F2',
+    borderColor: '#FECACA',
+  },
+  successBox: {
+    backgroundColor: '#F0FDF4',
+    borderColor: '#BBF7D0',
+  },
+  infoBox: {
+    backgroundColor: '#F0FDFA',
+    borderColor: '#99F6E4',
+  },
+  feedbackText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  errorText: { color: '#B91C1C' },
+  successText: { color: '#15803D' },
+  infoText: { color: '#0F766E' },
   submitButton: {
     backgroundColor: '#0B4754',
     borderRadius: 16,
     paddingVertical: 16,
     alignItems: 'center',
-    marginTop: 16,
+    marginTop: 14,
   },
   buttonTextRow: { flexDirection: 'row', alignItems: 'center' },
   submitButtonText: { color: '#FFF', fontSize: 16, fontWeight: 'bold' },
