@@ -1,5 +1,13 @@
+# Temel Bağımlılıklar ve Gizli Dosyalar (Hem backend hem mobile için)
 node_modules/
 .env
+
+# Expo ve React Native Önbellek/Derleme Dosyaları
 .expo/
-package.json.backup
-.gitignore.temp
+dist/
+web-build/
+npm-debug.log*
+
+# İşletim Sistemi Kalıntıları
+.DS_Store
+Thumbs.db
