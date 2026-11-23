@@ -5,13 +5,47 @@ function isValidUUID(id) {
 }
 
 // ==========================================
-// 1. UYUMLULUK SKORU HESAPLAYICI
+// YARDIMCI: KONU (TOPIC) BENZERLİK SKORU (%25)
+// ==========================================
+function calculateTopicScore(topicA, topicB) {
+  const cleanA = typeof topicA === 'string' ? topicA.toLocaleLowerCase('tr-TR').trim() : '';
+  const cleanB = typeof topicB === 'string' ? topicB.toLocaleLowerCase('tr-TR').trim() : '';
+
+  // Henüz konu girilmemişse veya şemada topic alanı boşsa akışı engelleme
+  if (!cleanA || !cleanB) {
+    return 10;
+  }
+
+  // Birebir aynı konu girilmişse tam puan
+  if (cleanA === cleanB) {
+    return 25;
+  }
+
+  // Biri diğerini kapsıyorsa (Örn: "Ağaçlar ve Graflar" ile "Ağaçlar")
+  if (cleanA.includes(cleanB) || cleanB.includes(cleanA)) {
+    return 22;
+  }
+
+  // Ortak anahtar kelime kontrolü
+  const wordsA = cleanA.split(/[\s,.-]+/).filter((w) => w.length > 3);
+  const wordsB = cleanB.split(/[\s,.-]+/).filter((w) => w.length > 3);
+  const hasSharedKeyword = wordsA.some((word) => wordsB.includes(word));
+
+  if (hasSharedKeyword) {
+    return 18;
+  }
+
+  return 0;
+}
+
+// ==========================================
+// 1. UYUMLULUK SKORU HESAPLAYICI (%100 AĞIRLIKLI)
 // ==========================================
 function calculateCompatibilityScore(reqA, reqB) {
   let totalScore = 0;
   const breakdown = {};
 
-  // 1. DERS UYUMLULUĞU (%30) - Zorunlu Kriter
+  // 1. DERS UYUMLULUĞU (%25) - Zorunlu Havuz Filtresi
   if (!reqA.course_id || reqA.course_id !== reqB.course_id) {
     return {
       isMatchEligible: false,
@@ -19,15 +53,20 @@ function calculateCompatibilityScore(reqA, reqB) {
       breakdown: { courseScore: 0 }
     };
   }
-  totalScore += 30;
-  breakdown.courseScore = 30;
+  totalScore += 25;
+  breakdown.courseScore = 25;
 
-  // 2. SEVİYE UYUMLULUĞU (%20) - Şemadaki preferred_level alanı
-  const levelScore = (reqA.preferred_level && reqA.preferred_level === reqB.preferred_level) ? 20 : 10;
+  // 2. KONU UYUMLULUĞU (%25) - Konu bazlı eşleştirme (topic)
+  const topicScore = calculateTopicScore(reqA.topic, reqB.topic);
+  totalScore += topicScore;
+  breakdown.topicScore = topicScore;
+
+  // 3. SEVİYE UYUMLULUĞU (%15) - Şemadaki preferred_level alanı
+  const levelScore = (reqA.preferred_level && reqA.preferred_level === reqB.preferred_level) ? 15 : 7;
   totalScore += levelScore;
   breakdown.levelScore = levelScore;
 
-  // 3. KAYNAK TAMAMLAYICILIĞI (%20) - Şemadaki resources tablosu
+  // 4. KAYNAK TAMAMLAYICILIĞI (%15) - Şemadaki resources tablosu
   const resourcesA = Array.isArray(reqA.resources) ? reqA.resources : [];
   const resourcesB = Array.isArray(reqB.resources) ? reqB.resources : [];
 
@@ -35,35 +74,33 @@ function calculateCompatibilityScore(reqA, reqB) {
   if (resourcesA.length > 0 && resourcesB.length > 0) {
     const hasComplementary = resourcesA.some((r) => !resourcesB.includes(r)) ||
                              resourcesB.some((r) => !resourcesA.includes(r));
-    resourceScore = hasComplementary ? 20 : 15;
+    resourceScore = hasComplementary ? 15 : 10;
   } else if (resourcesA.length > 0 || resourcesB.length > 0) {
-    resourceScore = 10;
+    resourceScore = 7;
   }
   totalScore += resourceScore;
   breakdown.resourceScore = resourceScore;
 
-  // 4. ÇALIŞMA TERCİHİ (%15) - Şemadaki study_preferences alanı
-  const preferenceScore = (reqA.study_preferences && reqA.study_preferences === reqB.study_preferences) ? 15 : 0;
+  // 5. ÇALIŞMA TERCİHİ (%10) - Şemadaki study_preferences alanı
+  const preferenceScore = (reqA.study_preferences && reqA.study_preferences === reqB.study_preferences) ? 10 : 0;
   totalScore += preferenceScore;
   breakdown.preferenceScore = preferenceScore;
 
-  // 5. GÜVENİLİRLİK PUANI (%15) - Şemadaki ratings tablosu (1-5 arası)
+  // 6. GÜVENİLİRLİK PUANI (%10) - Şemadaki ratings tablosu (5 kriter ortalaması)
   const ratingA = Number(reqA.avg_rating || 0);
   const ratingB = Number(reqB.avg_rating || 0);
 
   let reliabilityScore = 0;
   if (ratingA > 0 && ratingB > 0) {
     const avgRating = (ratingA + ratingB) / 2;
-    reliabilityScore = Math.round((Math.min(avgRating, 5) / 5) * 15);
+    reliabilityScore = Math.round((Math.min(avgRating, 5) / 5) * 10);
   } else if (ratingA > 0 || ratingB > 0) {
     const singleRating = ratingA > 0 ? ratingA : ratingB;
-    reliabilityScore = Math.round((Math.min(singleRating, 5) / 5) * 15);
+    reliabilityScore = Math.round((Math.min(singleRating, 5) / 5) * 10);
   }
   totalScore += reliabilityScore;
   breakdown.reliabilityScore = reliabilityScore;
 
-  // Kaynak veya değerlendirmesi henüz olmayan yeni seed kullanıcılarının da
-  // eşleşebilmesi için minimum eşik 40 olarak korunur.
   return {
     isMatchEligible: totalScore >= 40,
     totalScore,
@@ -118,22 +155,24 @@ async function enrichRequestsWithSchemaData(requests, courseId, db) {
       resourceMap[row.user_id].push(row.resource_type);
     }
   } catch (err) {
-    // Seed verisinde kaynak yoksa akışı kesme
+    // Henüz kaynak kaydı yoksa akışı kesme
   }
 
   try {
+    // Mevcut PostgreSQL şemasındaki reviewee_id ve 5 değerlendirme kriteri sütunu
     const ratingQuery = await db.query(
-      `SELECT rated_user_id, AVG(rating)::numeric(3,2) AS avg_rating
+      `SELECT reviewee_id,
+              AVG((course_contribution_score + communication_score + reliability_score + resource_sharing_score + study_harmony_score) / 5.0)::numeric(3,2) AS avg_rating
        FROM ratings
-       WHERE rated_user_id = ANY($1::uuid[])
-       GROUP BY rated_user_id`,
+       WHERE reviewee_id = ANY($1::uuid[])
+       GROUP BY reviewee_id`,
       [userIds]
     );
     for (const row of ratingQuery.rows) {
-      ratingMap[row.rated_user_id] = Number(row.avg_rating);
+      ratingMap[row.reviewee_id] = Number(row.avg_rating);
     }
   } catch (err) {
-    // Seed verisinde değerlendirme yoksa akışı kesme
+    // Henüz değerlendirme kaydı yoksa akışı kesme
   }
 
   return requests.map((req) => ({
@@ -199,6 +238,7 @@ async function processMatchRequest(newRequest, db) {
 
 module.exports = {
   isValidUUID,
+  calculateTopicScore,
   calculateCompatibilityScore,
   findBestMatch,
   processMatchRequest
