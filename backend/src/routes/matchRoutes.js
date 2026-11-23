@@ -1,9 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const matchController = require('../controllers/matchController');
-const authMiddleware = require('../middlewares/authMiddleware'); // Güvenlik kalkanımız!
+const authMiddleware = require('../middlewares/authMiddleware');
 
-// POST /api/matches/request - Sadece giriş yapmış kullanıcılar talep oluşturabilir
-router.post('/request', authMiddleware, matchController.createStudyRequest);
+router.use(authMiddleware);
+
+router.post('/request', matchController.createStudyRequest);
+router.get('/requests', matchController.listMyRequests);
+router.delete('/requests/:id', matchController.cancelStudyRequest);
+router.get('/', matchController.listMatches);
+router.get('/:id', matchController.getMatch);
 
 module.exports = router;

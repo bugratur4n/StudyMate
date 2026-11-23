@@ -1,0 +1,13 @@
+const express = require('express');
+const router = express.Router();
+const groupController = require('../controllers/groupController');
+const authMiddleware = require('../middlewares/authMiddleware');
+
+router.use(authMiddleware);
+
+router.get('/', groupController.listMyGroups);
+router.post('/', groupController.createGroup);
+router.get('/:id', groupController.getGroup);
+router.post('/:id/members', groupController.addMember);
+
+module.exports = router;

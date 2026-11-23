@@ -7,6 +7,14 @@ exports.register = async (req, res) => {
   const { first_name, last_name, email, password } = req.body;
 
   try {
+    if (!first_name || !last_name || !email || !password) {
+      return res.status(400).json({ message: 'Ad, soyad, e-posta ve şifre zorunludur.' });
+    }
+
+    if (password.length < 6) {
+      return res.status(400).json({ message: 'Şifre en az 6 karakter olmalıdır.' });
+    }
+
     // 1. Email kullanımda mı kontrol et
     const userCheck = await db.query('SELECT * FROM users WHERE email = $1', [email]);
     if (userCheck.rows.length > 0) {
@@ -39,6 +47,10 @@ exports.login = async (req, res) => {
   const { email, password } = req.body;
 
   try {
+    if (!email || !password) {
+      return res.status(400).json({ message: 'E-posta ve şifre zorunludur.' });
+    }
+
     // 1. Kullanıcıyı bul
     const userResult = await db.query('SELECT * FROM users WHERE email = $1', [email]);
     if (userResult.rows.length === 0) {
