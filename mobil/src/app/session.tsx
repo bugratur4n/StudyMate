@@ -2,6 +2,7 @@ import { router, useLocalSearchParams } from 'expo-router';
 import { useAuth } from '../context/AuthContext';
 import React, { useEffect, useState } from 'react';
 import {
+  Alert,
   Pressable,
   ScrollView,
   StatusBar,
@@ -39,8 +40,17 @@ export default function SessionScreen() {
 
       setSessionId(String(data.session.id));
     } catch (error) {
-      console.log('Oturum başlatma hatası:', error);
-    }
+  console.log('Oturum başlatma hatası:', error);
+
+  Alert.alert(
+    'Oturum Başlatılamadı',
+    error instanceof Error
+      ? error.message
+      : 'Oturum başlatılırken bir hata oluştu.'
+  );
+
+  router.replace('/');
+}
   };
 
   startSession();
