@@ -7,8 +7,43 @@ import {
   Text,
   View,
 } from 'react-native';
+import { apiRequest } from '../services/api';
+import { useAuth } from '../context/AuthContext';
+import React, { useEffect, useState } from 'react';
+import { Alert } from 'react-native';
 
 export default function MatchScreen() {
+  const [matchData, setMatchData] = useState<any>(null);
+  const [loading, setLoading] = useState(true);
+  const { token } = useAuth();
+
+  useEffect(() => {
+    const loadMatch = async () => {
+      if (!token) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const data = await apiRequest('/matches?active=true', token);
+
+        console.log('Match API cevabı:', data);
+
+        if (data.matches?.length > 0) {
+          setMatchData(data.matches[0]);
+        } else {
+          console.log('Aktif eşleşme bulunamadı.');
+        }
+      } catch (error) {
+        console.log('Match yükleme hatası:', error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    loadMatch();
+  }, [token]);
+
   const { course } = useLocalSearchParams();
 
   const selectedCourse = String(course || 'Seçilen ders');
@@ -73,36 +108,55 @@ export default function MatchScreen() {
         </View>
 
         {/* SCORE CARD */}
-        <View style={styles.scoreCard}>
-          <View style={styles.scoreTop}>
-            <View>
-              <Text style={styles.scoreLabel}>UYUM PUANI</Text>
+<View style={styles.scoreCard}>
+  <View style={styles.scoreTop}>
+    <View>
+      <Text style={styles.scoreLabel}>UYUM PUANI</Text>
 
-              <View style={styles.scoreRow}>
-                <Text style={styles.percentage}>%87</Text>
+      <View style={styles.scoreRow}>
+        <Text style={styles.percentage}>
+          %{Math.round(Number(matchData?.compatibility_score ?? 0))}
+        </Text>
 
-                <View style={styles.highMatchBadge}>
-                  <Text style={styles.highMatchText}>
-                    Yüksek uyum
-                  </Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={styles.scoreIcon}>
-              <Text style={styles.scoreIconText}>✦</Text>
-            </View>
-          </View>
-
-          <View style={styles.progressBackground}>
-            <View style={styles.progressFill} />
-          </View>
-
-          <View style={styles.progressLabels}>
-            <Text style={styles.progressText}>Uyumsuz</Text>
-            <Text style={styles.progressText}>Mükemmel uyum</Text>
-          </View>
+        <View style={styles.highMatchBadge}>
+          <Text style={styles.highMatchText}>
+            {(Number(matchData?.compatibility_score) || 0) >= 70
+              ? 'Yüksek uyum'
+              : (Number(matchData?.compatibility_score) || 0) >= 40
+              ? 'İyi uyum'
+              : 'Düşük uyum'}
+          </Text>
         </View>
+      </View>
+    </View>
+
+    <View style={styles.scoreIcon}>
+      <Text style={styles.scoreIconText}>✦</Text>
+    </View>
+  </View>
+
+  <View style={styles.progressBackground}>
+    <View
+      style={[
+        styles.progressFill,
+        {
+          width: `${Math.min(
+            100,
+            Math.max(
+              0,
+              Number(matchData?.compatibility_score ?? 0)
+            )
+          )}%`,
+        },
+      ]}
+    />
+  </View>
+
+  <View style={styles.progressLabels}>
+    <Text style={styles.progressText}>Uyumsuz</Text>
+    <Text style={styles.progressText}>Mükemmel uyum</Text>
+  </View>
+</View>
 
         {/* USER CARD */}
         <View style={styles.userCard}>
@@ -115,11 +169,12 @@ export default function MatchScreen() {
 
             <View style={styles.userInfoContainer}>
               <Text style={styles.userName}>
-                StudyMate Kullanıcısı
+                {matchData?.partner?.first_name || 'StudyMate'}{' '}
+                {matchData?.partner?.last_name || 'Kullanıcısı'}
               </Text>
 
               <Text style={styles.userInfo}>
-                Bilgisayar Mühendisliği
+                {matchData?.partner?.department || 'Bölüm belirtilmemiş'}
               </Text>
             </View>
 
@@ -145,7 +200,9 @@ export default function MatchScreen() {
             <View style={styles.detailItem}>
               <Text style={styles.detailTitle}>SEVİYE</Text>
 
-              <Text style={styles.detailText}>Orta</Text>
+             <Text style={styles.detailText}>
+                {matchData?.partner?.preferred_level || 'Belirtilmemiş'}
+              </Text>
             </View>
 
             <View style={styles.detailItem}>
@@ -153,7 +210,9 @@ export default function MatchScreen() {
 
               <View style={styles.rating}>
                 <Text style={styles.star}>★</Text>
-                <Text style={styles.ratingText}>4.8</Text>
+                <Text style={styles.ratingText}>
+                  {matchData?.partner?.averageRating?.toFixed(1) || 'Yeni'}
+                </Text>
               </View>
             </View>
           </View>
@@ -183,7 +242,29 @@ export default function MatchScreen() {
             styles.startButton,
             pressed && styles.startButtonPressed,
           ]}
-          onPress={() => router.push('/session')}
+          onPress={() => {
+            if (!matchData?.id) {
+              Alert.alert('Eşleşme bilgisi yüklenemedi.');
+              return;
+            }
+
+            router.push({
+  pathname: '/session',
+  params: {
+    matchId: String(matchData.id),
+    courseName: String(
+      matchData.course?.course_name || course || ''
+    ),
+    partnerName: `${matchData.partner?.first_name || ''} ${
+      matchData.partner?.last_name || ''
+    }`.trim(),
+    partnerDepartment: String(
+      matchData.partner?.department || ''
+    ),
+  },
+});
+
+          }}
         >
           <View style={styles.startButtonIcon}>
             <Text style={styles.startButtonIconText}>→</Text>
@@ -493,11 +574,10 @@ const styles = StyleSheet.create({
   },
 
   progressFill: {
-    width: '87%',
-    height: '100%',
-    backgroundColor: '#62C4CD',
-    borderRadius: 4,
-  },
+  height: '100%',
+  backgroundColor: '#62C4CD',
+  borderRadius: 4,
+},
 
   progressLabels: {
     flexDirection: 'row',

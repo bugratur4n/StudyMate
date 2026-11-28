@@ -8,6 +8,9 @@ import {
   Text,
   View,
 } from 'react-native';
+import { Alert } from 'react-native';
+import { apiRequest } from '../services/api';
+import { useAuth } from '../context/AuthContext';
 
 const levels = ['Başlangıç', 'Orta', 'İleri'];
 
@@ -36,7 +39,8 @@ const preferences = [
 ];
 
 export default function RequestScreen() {
-  const { course } = useLocalSearchParams();
+  const { token } = useAuth();
+  const { course, courseId } = useLocalSearchParams();
 
   const [selectedLevel, setSelectedLevel] = useState('');
   const [selectedResources, setSelectedResources] = useState<string[]>([]);
@@ -44,6 +48,56 @@ export default function RequestScreen() {
     useState<string[]>([]);
   const [selectedPreferences, setSelectedPreferences] =
     useState<string[]>([]);
+
+const [selectedTopics, setSelectedTopics] = useState<string[]>([]);
+
+// Şimdilik tasarım/test verisi.
+// Backend konu API'si hazır olduğunda buradan kaldıracağız.
+const courseTopics: Record<string, string[]> = {
+  'Atatürk İlkeleri ve İnkılap Tarihi': [
+    'Osmanlı Devleti’nin Son Dönemi',
+    'Mondros Ateşkes Antlaşması',
+    'Kurtuluş Savaşı',
+    'TBMM’nin Açılması',
+    'Atatürk İlkeleri',
+    'Türk İnkılapları',
+  ],
+
+  'Veritabanı Sistemleri': [
+    'ER Diyagramları',
+    'İlişkisel Şema',
+    'Primary Key / Foreign Key',
+    'SQL',
+    'JOIN İşlemleri',
+    'Normalizasyon',
+  ],
+
+  'Veri Yapıları': [
+    'Diziler',
+    'Bağlı Listeler',
+    'Stack',
+    'Queue',
+    'Ağaçlar',
+    'Graflar',
+  ],
+
+  'Mikroişlemciler': [
+    'İşlemci Mimarisi',
+    'Bellek Hiyerarşisi',
+    'Cache',
+    'Pipeline ve ILP',
+    'Interrupt',
+    'RAM ve DDR',
+  ],
+};
+
+const topics =
+  courseTopics[String(course)] || [
+    'Temel Konular',
+    'Kavramlar',
+    'Örnek Sorular',
+    'Uygulamalar',
+  ];
 
   const toggleSelection = (
     item: string,
@@ -59,14 +113,55 @@ export default function RequestScreen() {
     }
   };
 
-  const handleMatch = () => {
-    router.push({
-      pathname: '/match',
-      params: {
-        course: String(course || 'Veri Yapıları'),
-      },
+  const handleMatch = async () => {
+  if (!token) {
+    Alert.alert('Oturum Hatası', 'Lütfen tekrar giriş yapın.');
+    return;
+  }
+
+  if (!courseId || !selectedLevel || selectedTopics.length === 0) {
+    Alert.alert(
+  'Eksik Bilgi',
+  'Lütfen konu ve çalışma seviyenizi seçin.'
+);
+    return;
+  }
+
+  try {
+    const data = await apiRequest('/matches/request', token, 'POST', {
+      course_id: String(courseId),
+      preferred_level: selectedLevel,
+      study_preferences: [
+  selectedTopics.length > 0
+    ? `Konular: ${selectedTopics.join(', ')}`
+    : '',
+  selectedPreferences.length > 0
+    ? `Tercihler: ${selectedPreferences.join(', ')}`
+    : '',
+]
+  .filter(Boolean)
+  .join(' | '),
     });
-  };
+
+    if (data.match) {
+      Alert.alert('Eşleşme Bulundu!', 'Çalışma eşleşmeniz oluşturuldu.');
+      router.push({
+        pathname: '/match',
+        params: { course: String(course || '') },
+      });
+    } else {
+      Alert.alert(
+        'İstek Kaydedildi',
+        'Çalışma isteğiniz kaydedildi. Eşleşme bekleniyor.'
+      );
+    }
+  } catch (error) {
+    Alert.alert(
+      'Hata',
+      error instanceof Error ? error.message : 'Bir hata oluştu.'
+    );
+  }
+};
 
   const renderOption = (
     item: string,
@@ -173,13 +268,13 @@ export default function RequestScreen() {
           </Text>
 
           <Text style={styles.heroDescription}>
-            Seviyeni, kaynaklarını ve çalışma tercihlerini belirle.
+            Ders konunu, seviyeni, kaynaklarını ve çalışma tercihlerini belirle.
             StudyMate sana uygun öğrencileri bulsun.
           </Text>
 
           <View style={styles.progressArea}>
             <View style={styles.progressHeader}>
-              <Text style={styles.progressText}>ADIM 4 / 4</Text>
+              <Text style={styles.progressText}>ADIM 5 / 5</Text>
               <Text style={styles.progressPercent}>100%</Text>
             </View>
 
@@ -207,9 +302,34 @@ export default function RequestScreen() {
         </View>
 
         {/* LEVEL */}
+
+{/* TOPICS */}
+<View style={styles.sectionHeader}>
+  <View style={styles.sectionNumber}>
+    <Text style={styles.sectionNumberText}>01</Text>
+  </View>
+
+  <View style={styles.sectionHeaderText}>
+    <Text style={styles.sectionTitle}>Çalışmak istediğin konular</Text>
+    <Text style={styles.sectionDescription}>
+      Bu derste çalışmak istediğin konuları seç.
+    </Text>
+  </View>
+</View>
+
+<View style={styles.optionList}>
+  {topics.map((topic) =>
+    renderOption(
+      topic,
+      selectedTopics,
+      setSelectedTopics
+    )
+  )}
+</View>
+
         <View style={styles.sectionHeader}>
           <View style={styles.sectionNumber}>
-            <Text style={styles.sectionNumberText}>01</Text>
+            <Text style={styles.sectionNumberText}>02</Text>
           </View>
 
           <View style={styles.sectionHeaderText}>
@@ -267,7 +387,7 @@ export default function RequestScreen() {
         {/* OWN RESOURCES */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionNumber}>
-            <Text style={styles.sectionNumberText}>02</Text>
+            <Text style={styles.sectionNumberText}>03</Text>
           </View>
 
           <View style={styles.sectionHeaderText}>
@@ -293,7 +413,7 @@ export default function RequestScreen() {
         {/* WANTED RESOURCES */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionNumber}>
-            <Text style={styles.sectionNumberText}>03</Text>
+            <Text style={styles.sectionNumberText}>04</Text>
           </View>
 
           <View style={styles.sectionHeaderText}>
@@ -319,7 +439,7 @@ export default function RequestScreen() {
         {/* PREFERENCES */}
         <View style={styles.sectionHeader}>
           <View style={styles.sectionNumber}>
-            <Text style={styles.sectionNumberText}>04</Text>
+            <Text style={styles.sectionNumberText}>05</Text>
           </View>
 
           <View style={styles.sectionHeaderText}>

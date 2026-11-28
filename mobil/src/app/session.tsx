@@ -1,4 +1,6 @@
-import { router } from 'expo-router';
+import { router, useLocalSearchParams } from 'expo-router';
+import { useAuth } from '../context/AuthContext';
+import React, { useEffect, useState } from 'react';
 import {
   Pressable,
   ScrollView,
@@ -7,8 +9,53 @@ import {
   Text,
   View,
 } from 'react-native';
+import { apiRequest } from '../services/api';
 
 export default function SessionScreen() {
+  const { matchId, courseName, partnerName, partnerDepartment } =
+    useLocalSearchParams();
+
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [remainingSeconds, setRemainingSeconds] = useState(20 * 60);
+
+  const { token } = useAuth();
+
+    useEffect(() => {
+  const startSession = async () => {
+    if (!matchId || !token) {
+      console.log('Oturum başlatılamadı: token veya matchId yok.');
+      return;
+    }
+
+    try {
+      const data = await apiRequest(
+        '/sessions',
+        token,
+        'POST',
+        { match_id: String(matchId) }
+      );
+
+      console.log('Session API cevabı:', data);
+
+      setSessionId(String(data.session.id));
+    } catch (error) {
+      console.log('Oturum başlatma hatası:', error);
+    }
+  };
+
+  startSession();
+}, [matchId, token]);
+  
+  useEffect(() => {
+  if (!sessionId || remainingSeconds <= 0) return;
+
+  const timer = setInterval(() => {
+    setRemainingSeconds((prev) => prev - 1);
+  }, 1000);
+
+  return () => clearInterval(timer);
+}, [sessionId, remainingSeconds]);
+  
   return (
     <View style={styles.container}>
       <StatusBar barStyle="dark-content" />
@@ -76,7 +123,11 @@ export default function SessionScreen() {
           </View>
 
           <Text style={styles.timer}>
-            20:00
+            {`${Math.floor(remainingSeconds / 60)
+              .toString()
+              .padStart(2, '0')}:${(remainingSeconds % 60)
+              .toString()
+              .padStart(2, '0')}`}
           </Text>
 
           <View style={styles.timerProgressBackground}>
@@ -103,11 +154,11 @@ export default function SessionScreen() {
 
             <View style={styles.userInfo}>
               <Text style={styles.userName}>
-                StudyMate Kullanıcısı
+                {partnerName || 'Çalışma Arkadaşı'}
               </Text>
 
               <Text style={styles.userDepartment}>
-                Bilgisayar Mühendisliği
+                {partnerDepartment || 'Bölüm bilgisi yok'}
               </Text>
             </View>
 
@@ -145,7 +196,7 @@ export default function SessionScreen() {
             </Text>
 
             <Text style={styles.courseName}>
-              Veri Yapıları
+              {courseName || 'Ders adı belirtilmemiş'}
             </Text>
 
             <Text style={styles.courseInfo}>
@@ -240,7 +291,26 @@ export default function SessionScreen() {
             styles.endButton,
             pressed && styles.endButtonPressed,
           ]}
-          onPress={() => router.replace('/')}
+          onPress={async () => {
+  if (!sessionId) {
+    router.replace('/');
+    return;
+  }
+
+  try {
+
+    await apiRequest(
+  `/sessions/${sessionId}/end`,
+  token || undefined,
+  'PATCH'
+);
+
+  } catch (error) {
+    console.log('Oturum bitirme hatası:', error);
+  } finally {
+    router.replace('/');
+  }
+}}
         >
           <Text style={styles.endButtonText}>
             Oturumu Bitir
